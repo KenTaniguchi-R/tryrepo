@@ -28,11 +28,18 @@ people give up before they get something running.
 5. You get a live link. The sandbox auto-deletes after 30 minutes.
 
 **If it isn't a web app at all** — a CLI tool, TUI, or library — you don't get
-a refusal. The agent opens an **interactive terminal** in the chat instead: a
-real bash shell inside a sandbox with the repo checked out at `/repo`, on a
-base image picked to match the project's language. That covers the majority
-case: of 20 real trending repos, only 4 had a Dockerfile and 12 weren't web
-apps at all.
+a refusal. The agent opens an **interactive terminal** instead: a real bash
+shell inside a sandbox with the repo at `/repo`, on a base image matched to the
+project's language. That covers the majority case: of 20 real trending repos,
+only 4 had a Dockerfile and 12 weren't web apps at all.
+
+The terminal opens with the project **already built and installed**, not as a
+folder of source you'd have to compile yourself. The analysis step returns the
+project's own documented build steps (e.g. `go build -o /usr/local/bin/croc .`)
+and they're baked into the image, so `croc --version` works the moment the
+shell appears. Setup is best-effort and time-boxed — a project that won't
+compile still gives you a working shell, with the log at
+`/repo/.tryrepo-setup.log`.
 
 Validated against real GitHub repos (not just synthetic fixtures) pulled from
 a live "trending repos" snapshot (`src/data/trending-repos.json`).
@@ -44,7 +51,7 @@ a live "trending repos" snapshot (`src/data/trending-repos.json`).
 | **Daytona** | Core sandbox engine — builds an image from the target repo's Dockerfile, runs it isolated, exposes a public auto-expiring preview URL, and provides the **PTY sessions** behind the in-browser terminal. |
 | **CopilotKit** | The chat UI and agent runtime (`/api/copilotkit`), plus two interactive surfaces: a **human-in-the-loop** form (`useHumanInTheLoop`) that pauses the agent to collect a repo's required env vars, and a **frontend tool** (`useFrontendTool`) that renders the live terminal inline in the chat. |
 | **Fireworks AI** | Hosts the chat model (via `@ai-sdk/openai` pointed at Fireworks' OpenAI-compatible endpoint) that CopilotKit's `BuiltInAgent` uses to decide when to call `deployRepo` and to narrate results. |
-| **Braintrust** | Every deploy attempt (success or failure, with timing) is logged as a traced span, so reliability is a measured number, not a claim. |
+| **Braintrust** | Both halves of the product are traced (`deployRepo` and `openTerminal`, with a `ready_to_use` score so an empty shell isn't counted as a win) — and, more importantly, an **offline eval** (`evals/`) scores the model's judgement against 20 hand-labelled real repos using deterministic scorers. Measured, v1→v2 prompt: `env_vars_grounded` 89.02% → 99.64% (+10.63pp, 4 improvements, 0 regressions). |
 
 WorkOS and CodeRabbit were considered but cut — see "Cut list" below.
 
@@ -130,14 +137,29 @@ without it.
 ```
 src/
   app/
-    api/copilotkit/route.ts   CopilotKit runtime: Fireworks model + deployRepo tool
-    page.tsx                  Chat UI
+    api/copilotkit/route.ts     CopilotKit runtime: Fireworks model + analyzeRepo/deployRepo tools
+    api/terminal/start          Opens a PTY session (sets the owner cookie)
+    api/terminal/[id]/stream    SSE of terminal output
+    api/terminal/[id]/input     Keystrokes and resize
+    page.tsx                    Chat + workspace pane
+  components/
+    EnvVarPrompt.tsx            Human-in-the-loop form for a repo's required env vars
+    TerminalTool.tsx            Frontend tool the agent calls to open a shell
+    RepoTerminal.tsx            xterm.js client
   lib/
-    deploy.ts                 Core pipeline: clone -> detect/synthesize -> strip USER -> build -> sandbox -> expose
-    synthesizeDockerfile.ts   Fireworks-based Dockerfile generation for repos without one
-    fireworks.ts              Shared Fireworks client/model config
-    braintrust.ts             Deploy-attempt tracing
+    analyzeRepo.ts              The LLM step: servability, Dockerfile synthesis, env vars, setup commands
+    deploy.ts                   Web path: clone -> strip USER -> inject env -> build -> sandbox -> expose
+    terminal.ts                 Terminal path: build+install into the image, PTY session, ownership
+    reapSandboxes.ts            Frees Daytona's disk quota before each run
+    repo.ts                     Clone + README/manifest reading
+    fireworks.ts                Shared Fireworks client/model config
+    braintrust.ts               Tracing for both deploys and terminals
+evals/
+  analyze.eval.ts               Braintrust eval over the LLM step (offline, deterministic scorers)
+  labels.ts                     Hand-labelled ground truth, with explicit `ambiguous` abstentions
+  snapshot-fixtures.ts          Captures repo context so the eval needs no network
 scripts/
-  test-deploy.ts              Standalone test harness for lib/deploy.ts (bypasses the chat UI)
-  debug-build.ts              Verbose Daytona build-log output for diagnosing a specific repo's build failure
+  batch-test.ts                 End-to-end measurement across all 20 trending repos
+  cleanup-sandboxes.ts          Run before a demo -- a full quota fails every deploy
+  test-deploy.ts                Standalone harness for lib/deploy.ts (bypasses the chat UI)
 ```

@@ -1,14 +1,18 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { newOwnerId, startTerminalSession } from "@/lib/terminal";
+import { logTerminalAttempt } from "@/lib/braintrust";
 
 export const maxDuration = 300;
 
 export const TERMINAL_OWNER_COOKIE = "tryrepo_term_owner";
 
 export async function POST(req: Request) {
+  const startedAt = Date.now();
+  let repoUrlForLog = "";
   try {
     const { repoUrl } = (await req.json()) as { repoUrl?: string };
+    repoUrlForLog = repoUrl ?? "";
     if (!repoUrl) {
       return NextResponse.json({ error: "repoUrl is required" }, { status: 400 });
     }
@@ -22,6 +26,14 @@ export async function POST(req: Request) {
     console.log(`[terminal] starting session for ${repoUrl}`);
     const result = await startTerminalSession(repoUrl, ownerId);
     console.log(`[terminal] session ready (${result.baseImage})`);
+    await logTerminalAttempt({
+      repoUrl,
+      success: true,
+      durationMs: Date.now() - startedAt,
+      baseImage: result.baseImage,
+      setupRan: result.setupRan,
+      tryCommand: result.tryCommand,
+    });
 
     const res = NextResponse.json(result);
     if (!existing) {
@@ -36,6 +48,12 @@ export async function POST(req: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.log(`[terminal] start failed: ${message}`);
+    await logTerminalAttempt({
+      repoUrl: repoUrlForLog,
+      success: false,
+      durationMs: Date.now() - startedAt,
+      error: message,
+    });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -108,6 +108,24 @@ over complete-and-polished.
    `package.json` is a dead end — pnpm 11 moved this to
    `pnpm-workspace.yaml` and silently ignores the `package.json` field.
 
+## The terminal builds the project into the image
+
+`terminal.ts` bakes the project's own install steps (from `analyzeRepo`'s
+`setupCommands`) into the image via `.runCommands()` **chained after
+`.addLocalDir()`** — ordering matters, since the COPY has to land before any
+RUN that touches repo files. Without this the user gets a shell full of
+un-built source and the agent suggests binaries that don't exist (it proposed
+`./croc --version`, which errors).
+
+Setup is intentionally best-effort: it runs under `timeout 300` and writes to
+`/repo/.tryrepo-setup.log` rather than failing the image, so a project that
+won't compile still yields a working shell. Don't "fix" this by making it
+fatal.
+
+`tryCommand` is sanitized to its first non-comment line in code
+(`firstCommand()`). Asking the prompt for "a single command" was not enough —
+the model returned a multi-line script with commentary.
+
 ## Verifying changes to the deploy pipeline
 
 `src/lib/deploy.ts` is the core logic (clone -> detect Dockerfile -> parse
