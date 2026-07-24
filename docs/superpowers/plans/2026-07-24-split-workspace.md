@@ -176,9 +176,10 @@ Expected: FAIL — `Failed to resolve import "@/lib/workspace"`.
 
 - [ ] **Step 5: Implement the store**
 
-Create `src/lib/workspace.ts`. The `Map` + counter idiom mirrors `src/lib/terminal.ts`.
+Create `src/lib/workspace.ts`. The module-level `Map` mirrors `src/lib/terminal.ts`, but ids are generated with a CSPRNG rather than `terminal.ts`'s monotonic counter — see the note in the file header for why.
 
 ```ts
+import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 
 /**
@@ -188,6 +189,11 @@ import { rm } from "node:fs/promises";
  * Deliberately in-memory and unpersisted: a server restart loses these, and
  * the sweeper is the only reclamation path. That is the same trade terminal.ts
  * makes for PTY sessions.
+ *
+ * Ids are random rather than sequential. A workspace id is the only thing
+ * guarding a clone's contents, and the tools that take one perform no other
+ * authorization check, so a guessable id would let one caller read another's
+ * checkout.
  */
 export interface Workspace {
   id: string;
@@ -202,14 +208,13 @@ export interface Workspace {
 export const WORKSPACE_TTL_MS = 35 * 60 * 1000;
 
 const workspaces = new Map<string, Workspace>();
-let counter = 0;
 
 export function createWorkspace(
   repoUrl: string,
   workDir: string,
   now: number = Date.now()
 ): Workspace {
-  const id = `ws-${++counter}-${now.toString(36)}`;
+  const id = `ws-${randomBytes(16).toString("base64url")}`;
   const workspace: Workspace = { id, workDir, repoUrl, createdAt: now };
   workspaces.set(id, workspace);
   return workspace;
