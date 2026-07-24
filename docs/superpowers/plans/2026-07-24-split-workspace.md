@@ -1682,6 +1682,27 @@ git commit -m "Show deploys and terminals in a split workspace pane"
 
 ---
 
+## Deferred security finding (accepted, not fixed here)
+
+An automated review flagged `src/lib/terminal.ts`: session ids are
+`term-<counter>-<8 hex of sandbox id>`, and `/api/terminal/[id]/input` and
+`/api/terminal/[id]/stream` call `getSession(id)` with no authorization check.
+Guessing an id therefore grants interactive shell access to another user's
+sandbox. Rated HIGH.
+
+Decision: **acknowledged and deferred.** The app currently runs on localhost via
+`pnpm dev`, where practical exposure is low. This is recorded so it is not
+silently lost, and so the final whole-branch review can triage it.
+
+It stops being low-risk the moment the app is demoed on a shared network or
+hosted anywhere. The fix is CSPRNG session ids plus binding the session to its
+requester — an httpOnly cookie set by the `start` route and verified in both
+`/input` and `/stream`.
+
+This plan does not touch it, but it does avoid repeating the pattern:
+`workspace.ts` (Task 1) generates ids with `randomBytes` rather than a counter,
+because a workspace id is likewise the only thing guarding a clone's contents.
+
 ## Known deviation from the spec
 
 The spec's states table says the **Building** state should be shown in the pane, with it "mirroring the progress messages `deployRepo` already emits." This plan does not do that, for two reasons found while writing it:
