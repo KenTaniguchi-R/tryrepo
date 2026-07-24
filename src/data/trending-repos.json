@@ -1,0 +1,206 @@
+{
+  "source": "https://github.com/trending?since=weekly",
+  "fetchedAt": "2026-07-24",
+  "repos": [
+    {
+      "rank": 1,
+      "name": "bojieli/ai-agent-book",
+      "url": "https://github.com/bojieli/ai-agent-book",
+      "description": "《深入理解 AI Agent：设计原理与工程实践》（李博杰 著）开源主仓库：全书正文、编译版 PDF 与按章配套代码",
+      "language": "Python",
+      "stars": 19045,
+      "starsThisWeek": 17443,
+      "forks": 1896
+    },
+    {
+      "rank": 2,
+      "name": "koala73/worldmonitor",
+      "url": "https://github.com/koala73/worldmonitor",
+      "description": "Real-time global intelligence dashboard. AI-powered news aggregation, geopolitical monitoring, and infrastructure tracking in a unified situational awareness interface",
+      "language": "TypeScript",
+      "stars": 73067,
+      "starsThisWeek": 9054,
+      "forks": 10967
+    },
+    {
+      "rank": 3,
+      "name": "tirth8205/code-review-graph",
+      "url": "https://github.com/tirth8205/code-review-graph",
+      "description": "Local-first code intelligence graph for MCP and CLI. Builds a persistent map of your codebase so AI coding tools read only what matters, with benchmarked context reductions on reviews and large-repo workflows.",
+      "language": "Python",
+      "stars": 26175,
+      "starsThisWeek": 6257,
+      "forks": 2450
+    },
+    {
+      "rank": 4,
+      "name": "MoonshotAI/kimi-code",
+      "url": "https://github.com/MoonshotAI/kimi-code",
+      "description": "Kimi Code CLI — The Starting Point for Next-Gen Agents",
+      "language": "TypeScript",
+      "stars": 4920,
+      "starsThisWeek": 1610,
+      "forks": 717
+    },
+    {
+      "rank": 5,
+      "name": "1jehuang/jcode",
+      "url": "https://github.com/1jehuang/jcode",
+      "description": "The most intelligent agent harness for code",
+      "language": "Rust",
+      "stars": 11177,
+      "starsThisWeek": 2586,
+      "forks": 1224
+    },
+    {
+      "rank": 6,
+      "name": "diegosouzapw/OmniRoute",
+      "url": "https://github.com/diegosouzapw/OmniRoute",
+      "description": "Never stop coding. Free MIT AI gateway: one endpoint, 290+ providers (90+ free), 500+ models — Kimi, Claude, GPT, OpenAI, Gemini, GLM, DeepSeek, MiniMax. Works with Claude Code, Codex, Cursor, OpenCode, Cline & Copilot. Quota-aware auto-fallback, RTK+Caveman compression saves 15-95% tokens, MCP/A2A, Desktop/PWA. Built by 500+ contributors",
+      "language": "TypeScript",
+      "stars": 28540,
+      "starsThisWeek": 8673,
+      "forks": 3744
+    },
+    {
+      "rank": 7,
+      "name": "agegr/pi-web",
+      "url": "https://github.com/agegr/pi-web",
+      "description": "Web UI for the pi coding agent",
+      "language": "TypeScript",
+      "stars": 2595,
+      "starsThisWeek": 1050,
+      "forks": 346
+    },
+    {
+      "rank": 8,
+      "name": "HKUDS/DeepTutor",
+      "url": "https://github.com/HKUDS/DeepTutor",
+      "description": "DeepTutor: Lifelong Personalized Tutoring. https://deeptutor.info/",
+      "language": "Python",
+      "stars": 29545,
+      "starsThisWeek": 2661,
+      "forks": 3895
+    },
+    {
+      "rank": 9,
+      "name": "MoonshotAI/kimi-cli",
+      "url": "https://github.com/MoonshotAI/kimi-cli",
+      "description": "Kimi Code CLI is your next CLI agent.",
+      "language": "Python",
+      "stars": 10773,
+      "starsThisWeek": 1528,
+      "forks": 1251
+    },
+    {
+      "rank": 10,
+      "name": "earendil-works/pi",
+      "url": "https://github.com/earendil-works/pi",
+      "description": "AI agent toolkit: unified LLM API, agent loop, TUI, coding agent CLI",
+      "language": "TypeScript",
+      "stars": 76989,
+      "starsThisWeek": 4495,
+      "forks": 9468
+    },
+    {
+      "rank": 11,
+      "name": "rohitg00/ai-engineering-from-scratch",
+      "url": "https://github.com/rohitg00/ai-engineering-from-scratch",
+      "description": "Learn it. Build it. Ship it for others.",
+      "language": "Python",
+      "stars": 43118,
+      "starsThisWeek": 4354,
+      "forks": 7203
+    },
+    {
+      "rank": 12,
+      "name": "ibelick/ui-skills",
+      "url": "https://github.com/ibelick/ui-skills",
+      "description": "Skills for Design Engineers",
+      "language": "TypeScript",
+      "stars": 6283,
+      "starsThisWeek": 2139,
+      "forks": 276
+    },
+    {
+      "rank": 13,
+      "name": "PrismML-Eng/Bonsai-demo",
+      "url": "https://github.com/PrismML-Eng/Bonsai-demo",
+      "description": "Bonsai Demo",
+      "language": "Shell",
+      "stars": 2019,
+      "starsThisWeek": 553,
+      "forks": 198
+    },
+    {
+      "rank": 14,
+      "name": "Robbyant/lingbot-map",
+      "url": "https://github.com/Robbyant/lingbot-map",
+      "description": "A feed-forward 3D foundation model for reconstructing scenes from streaming data",
+      "language": "Python",
+      "stars": 15254,
+      "starsThisWeek": 4435,
+      "forks": 1580
+    },
+    {
+      "rank": 15,
+      "name": "apache/ossie",
+      "url": "https://github.com/apache/ossie",
+      "description": "Apache Ossie, industry wide specification effort to standardize how we exchange semantic metadata across analytics, AI and BI platforms, providing a vendor neutral, single source of truth for semantic data",
+      "language": "Python",
+      "stars": 1599,
+      "starsThisWeek": 764,
+      "forks": 182
+    },
+    {
+      "rank": 16,
+      "name": "Nutlope/hallmark",
+      "url": "https://github.com/Nutlope/hallmark",
+      "description": "Anti-AI-slop design skill for Claude Code, Cursor, and Codex.",
+      "language": "CSS",
+      "stars": 16922,
+      "starsThisWeek": 5797,
+      "forks": 852
+    },
+    {
+      "rank": 17,
+      "name": "mattpocock/skills",
+      "url": "https://github.com/mattpocock/skills",
+      "description": "Skills for Real Engineers. Straight from my .agents directory.",
+      "language": "Shell",
+      "stars": 186438,
+      "starsThisWeek": 10536,
+      "forks": 15991
+    },
+    {
+      "rank": 18,
+      "name": "kvcache-ai/ktransformers",
+      "url": "https://github.com/kvcache-ai/ktransformers",
+      "description": "A Flexible Framework for Experiencing Heterogeneous LLM Inference/Fine-tune Optimizations",
+      "language": "Python",
+      "stars": 18987,
+      "starsThisWeek": 1507,
+      "forks": 1483
+    },
+    {
+      "rank": 19,
+      "name": "ruvnet/RuView",
+      "url": "https://github.com/ruvnet/RuView",
+      "description": "RuView turns commodity WiFi signals into real-time spatial intelligence, vital sign monitoring, and presence detection — all without a single pixel of video.",
+      "language": "Rust",
+      "stars": 85807,
+      "starsThisWeek": 4139,
+      "forks": 11433
+    },
+    {
+      "rank": 20,
+      "name": "schollz/croc",
+      "url": "https://github.com/schollz/croc",
+      "description": "Easily and securely send things from one computer to another",
+      "language": "Go",
+      "stars": 38270,
+      "starsThisWeek": 2525,
+      "forks": 1518
+    }
+  ]
+}
