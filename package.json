@@ -13,6 +13,7 @@
     "@copilotkit/react-core": "^1.63.2",
     "@copilotkit/runtime": "^1.63.2",
     "@daytona/sdk": "^0.200.1",
+    "@phosphor-icons/react": "^2.1.10",
     "ai": "^6.0.234",
     "braintrust": "^3.24.0",
     "next": "16.2.11",
