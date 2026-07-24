@@ -7,6 +7,7 @@ import { CopilotChat, CopilotKit } from "@copilotkit/react-core/v2";
 import { ArrowRight, ArrowSquareOut } from "@phosphor-icons/react/dist/ssr";
 import { DeployTool } from "@/components/DeployTool";
 import { EnvVarPrompt } from "@/components/EnvVarPrompt";
+import { RepoReadTools } from "@/components/RepoReadTools";
 import { TerminalTool } from "@/components/TerminalTool";
 import { WorkspacePane, type PaneState } from "@/components/WorkspacePane";
 import trending from "@/data/trending-repos.json";
@@ -80,6 +81,7 @@ function Chat({
       <EnvVarPrompt />
       <DeployTool onDeployed={onDeployed} />
       <TerminalTool onReady={onTerminalReady} />
+      <RepoReadTools />
       {repo && !split && <RepoBanner repo={repo} />}
       <div className="flex-1 min-h-0 border border-neutral-200 rounded-2xl overflow-hidden flex flex-col">
         <div className="flex-1 min-h-0">
