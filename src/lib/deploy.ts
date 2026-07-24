@@ -1,10 +1,11 @@
-import { access, readFile, rm, writeFile } from "node:fs/promises";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Daytona, Image } from "@daytona/sdk";
 import type { Sandbox } from "@daytona/sdk";
 import { analyzeRepo } from "./analyzeRepo";
 import { reapExpiredSandboxes } from "./reapSandboxes";
 import { cloneRepo, normalizeRepoUrl } from "./repo";
+import { attachDeployment, createWorkspace, sweepWorkspaces } from "./workspace";
 
 export type DeployProgress = (message: string) => void;
 
@@ -14,6 +15,7 @@ export interface DeployResult {
   port: number;
   runCommand: string;
   dockerfileSource: "repo" | "synthesized";
+  workspaceId: string;
 }
 
 async function retry<T>(fn: () => Promise<T>, attempts: number, delayMs: number): Promise<T> {
@@ -221,8 +223,10 @@ export async function deployRepo(
 
   onProgress(`Cloning ${repoUrl}...`);
   const workDir = await cloneRepo(repoUrl);
+  await sweepWorkspaces();
+  const workspace = createWorkspace(repoUrl, workDir);
 
-  try {
+  {
     const dockerfilePath = join(workDir, "Dockerfile");
 
     if (analysis.dockerfileSource === "synthesized") {
@@ -276,14 +280,15 @@ export async function deployRepo(
     const preview = await sandbox.getPreviewLink(port);
     onProgress(`Live at ${preview.url}`);
 
+    attachDeployment(workspace.id, preview.url, sandbox.id);
+
     return {
       previewUrl: preview.url,
       sandboxId: sandbox.id,
       port,
       runCommand,
       dockerfileSource: analysis.dockerfileSource,
+      workspaceId: workspace.id,
     };
-  } finally {
-    await rm(workDir, { recursive: true, force: true });
   }
 }

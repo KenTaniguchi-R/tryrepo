@@ -84,6 +84,7 @@ const deployTool = defineTool({
         port: result.port,
         runCommand: result.runCommand,
         dockerfileSource: result.dockerfileSource,
+        workspaceId: result.workspaceId,
         note: "This preview URL auto-expires in 30 minutes.",
       };
     } catch (err) {

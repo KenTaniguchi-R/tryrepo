@@ -1,10 +1,11 @@
 import { randomBytes } from "node:crypto";
-import { access, rm, writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Daytona, Image } from "@daytona/sdk";
 import type { PtyHandle, Sandbox } from "@daytona/sdk";
 import { reapExpiredSandboxes } from "./reapSandboxes";
 import { cloneRepo, normalizeRepoUrl } from "./repo";
+import { createWorkspace, sweepWorkspaces } from "./workspace";
 
 /**
  * Not every repo is a web app. CLI tools, TUIs and libraries have no port to
@@ -60,11 +61,13 @@ async function pickBaseImage(workDir: string): Promise<string> {
 export async function startTerminalSession(
   repoUrlInput: string,
   ownerId: string
-): Promise<{ sessionId: string; sandboxId: string; baseImage: string }> {
+): Promise<{ sessionId: string; sandboxId: string; baseImage: string; workspaceId: string }> {
   const repoUrl = normalizeRepoUrl(repoUrlInput);
   const workDir = await cloneRepo(repoUrl);
+  await sweepWorkspaces();
+  const workspace = createWorkspace(repoUrl, workDir);
 
-  try {
+  {
     const baseImage = await pickBaseImage(workDir);
 
     // Copy the already-cloned repo in rather than cloning inside the build --
@@ -131,9 +134,7 @@ export async function startTerminalSession(
     await pty.waitForConnection();
     sessions.set(id, session);
 
-    return { sessionId: id, sandboxId: sandbox.id, baseImage };
-  } finally {
-    await rm(workDir, { recursive: true, force: true });
+    return { sessionId: id, sandboxId: sandbox.id, baseImage, workspaceId: workspace.id };
   }
 }
 
