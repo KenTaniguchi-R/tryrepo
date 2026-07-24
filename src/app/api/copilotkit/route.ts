@@ -9,6 +9,7 @@ import { deployRepo } from "@/lib/deploy";
 import { analyzeRepo } from "@/lib/analyzeRepo";
 import { logDeployAttempt } from "@/lib/braintrust";
 import { fireworks, FIREWORKS_MODEL } from "@/lib/fireworks";
+import { repoTools } from "@/lib/repoTools";
 
 const analyzeTool = defineTool({
   name: "analyzeRepo",
@@ -105,11 +106,13 @@ const runtime = new CopilotRuntime({
   agents: {
     default: new BuiltInAgent({
       model: fireworks.chat(FIREWORKS_MODEL),
-      tools: [analyzeTool, deployTool],
+      tools: [analyzeTool, deployTool, ...repoTools],
       // Default maxSteps is 1 -- the model would call a tool but never get a
       // follow-up turn. The full flow can be analyze -> collectEnvVars ->
-      // deploy -> summarize, so it needs headroom for several rounds.
-      maxSteps: 8,
+      // deploy -> summarize, so it needs headroom for several rounds. A
+      // read-heavy repo Q&A exchange (overview, grep, two reads, answer)
+      // needs even more, hence 12.
+      maxSteps: 12,
       prompt:
         "You help users try out open source GitHub projects instantly, without them needing to clone or configure anything locally.\n\n" +
         "When a user gives you a GitHub repo URL (or owner/repo shorthand), follow this sequence:\n" +
@@ -124,7 +127,12 @@ const runtime = new CopilotRuntime({
         "5. Give the user the preview URL and mention it expires in 30 minutes. If dockerfileSource is " +
         "'synthesized', flag that the Dockerfile was auto-generated and is best-effort.\n\n" +
         "If the user declines to provide env vars, you may still attempt the deploy, but warn them it " +
-        "will probably fail without them.",
+        "will probably fail without them." +
+        "\n\nAfter a deploy or terminal session succeeds you get a workspaceId. The user can then ask " +
+        "questions about the code. To answer those, call getRepoOverview with that workspaceId FIRST so " +
+        "you know the layout, then use grepRepo and readFile to look at specific code before answering. " +
+        "Never guess at what the code does -- read it. You cannot edit files or redeploy; if the user " +
+        "asks for a change, explain what would need to change and where.",
     }),
   },
 });
