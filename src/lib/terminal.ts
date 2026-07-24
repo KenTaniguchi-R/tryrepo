@@ -3,6 +3,7 @@ import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Daytona, Image } from "@daytona/sdk";
 import type { PtyHandle, Sandbox } from "@daytona/sdk";
+import { analyzeRepo } from "./analyzeRepo";
 import { reapExpiredSandboxes } from "./reapSandboxes";
 import { cloneRepo, normalizeRepoUrl } from "./repo";
 import { createWorkspace, sweepWorkspaces } from "./workspace";
@@ -40,6 +41,20 @@ export function newOwnerId(): string {
   return randomBytes(16).toString("hex");
 }
 
+/**
+ * The model is asked for one command but sometimes returns a multi-line
+ * script with commentary. Keep the first real command so the chat can offer
+ * something a user can actually paste.
+ */
+function firstCommand(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const line = raw
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0 && !l.startsWith("#"));
+  return line ?? null;
+}
+
 /** Pick a base image that actually has the repo's runtime available. */
 async function pickBaseImage(workDir: string): Promise<string> {
   const has = async (file: string) => {
@@ -61,7 +76,14 @@ async function pickBaseImage(workDir: string): Promise<string> {
 export async function startTerminalSession(
   repoUrlInput: string,
   ownerId: string
-): Promise<{ sessionId: string; sandboxId: string; baseImage: string; workspaceId: string }> {
+): Promise<{
+  sessionId: string;
+  sandboxId: string;
+  baseImage: string;
+  workspaceId: string;
+  tryCommand: string | null;
+  setupRan: boolean;
+}> {
   const repoUrl = normalizeRepoUrl(repoUrlInput);
   const workDir = await cloneRepo(repoUrl);
   await sweepWorkspaces();
@@ -92,7 +114,35 @@ export async function startTerminalSession(
       "utf8"
     );
 
-    const image = Image.fromDockerfile(dockerfilePath).addLocalDir(workDir, "/repo");
+    // A shell full of un-built source isn't much use -- the user wants to run
+    // the tool, not compile it. Bake the project's own install steps into the
+    // image so the terminal opens ready to go.
+    //
+    // analyzeRepo is cached from the agent's earlier call, so this is normally
+    // free. Setup is best-effort: a repo that won't build should still get a
+    // working shell, so failures are logged rather than failing the image.
+    const analysis = await analyzeRepo(repoUrl).catch(() => null);
+    const setupCommands = analysis?.setupCommands ?? [];
+
+    // Write the script before addLocalDir, which snapshots the directory.
+    if (setupCommands.length > 0) {
+      // A script rather than an inlined RUN so quotes and && chains in the
+      // model's commands survive intact.
+      await writeFile(
+        join(workDir, ".tryrepo-setup.sh"),
+        ["#!/usr/bin/env bash", "set -x", ...setupCommands, ""].join("\n"),
+        "utf8"
+      );
+    }
+
+    let image = Image.fromDockerfile(dockerfilePath).addLocalDir(workDir, "/repo");
+
+    if (setupCommands.length > 0) {
+      image = image.runCommands(
+        "cd /repo && timeout 300 bash .tryrepo-setup.sh > /repo/.tryrepo-setup.log 2>&1 " +
+          '|| echo "tryrepo: setup did not finish; see .tryrepo-setup.log" >> /repo/.tryrepo-setup.log'
+      );
+    }
 
     const daytona = new Daytona();
     await reapExpiredSandboxes(daytona);
@@ -134,7 +184,14 @@ export async function startTerminalSession(
     await pty.waitForConnection();
     sessions.set(id, session);
 
-    return { sessionId: id, sandboxId: sandbox.id, baseImage, workspaceId: workspace.id };
+    return {
+      sessionId: id,
+      sandboxId: sandbox.id,
+      baseImage,
+      workspaceId: workspace.id,
+      tryCommand: firstCommand(analysis?.tryCommand),
+      setupRan: setupCommands.length > 0,
+    };
   }
 }
 

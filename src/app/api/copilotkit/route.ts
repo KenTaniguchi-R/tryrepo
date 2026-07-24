@@ -119,8 +119,10 @@ const runtime = new CopilotRuntime({
         "1. Call analyzeRepo first, always.\n" +
         "2. If it reports webServable: false, do NOT call deployRepo. Briefly explain why there's no " +
         "web preview (it's a CLI tool, library, or docs collection), then call openTerminal so the " +
-        "user gets an interactive shell with the repo checked out at /repo instead. Once it's ready, " +
-        "suggest a concrete first command based on the repo's README (e.g. how to install and run it).\n" +
+        "user gets an interactive shell with the repo checked out at /repo instead. The project is " +
+        "already built and installed in that image, so once it's ready, offer the tool's returned " +
+        "tryCommand verbatim as the first thing to run. Never tell the user to build or install it " +
+        "themselves, and never suggest running a source-relative binary like ./name.\n" +
         "3. If it reports any requiredEnvVars, call collectEnvVars with that exact list to ask the user " +
         "for the values. Do NOT invent, guess, or fabricate values yourself, and do not skip this step.\n" +
         "4. Call deployRepo, passing envVars with whatever the user supplied (or {} if none were needed).\n" +

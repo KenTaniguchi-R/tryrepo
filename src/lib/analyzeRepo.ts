@@ -50,6 +50,23 @@ const AnalysisSchema = z.object({
         ".env.example, the README, docker-compose, or the code's configuration. Empty array if none " +
         "are needed. Do not invent variables that have working defaults."
     ),
+  setupCommands: z
+    .array(z.string())
+    .describe(
+      "Shell commands that build or install this project so it is ready to USE, run from /repo " +
+        "as root at image build time. Only for non-web projects opened in a terminal. Prefer the " +
+        "project's documented install (e.g. 'go build -o /usr/local/bin/croc .', " +
+        "'pip install -e .', 'npm install && npm run build'). Must be non-interactive and need no " +
+        "secrets or network logins. Empty array if nothing is needed or nothing can be built offline."
+    ),
+  tryCommand: z
+    .string()
+    .nullable()
+    .describe(
+      "A single command the user can run FIRST to see the tool working, assuming setupCommands " +
+        "already ran (e.g. 'croc --help'). Must reference a binary or entrypoint that will actually " +
+        "exist afterwards -- never a path like './croc' unless a build step produces it. Null if unclear."
+    ),
 });
 
 export type EnvVarRequirement = z.infer<typeof EnvVarSpec>;
@@ -62,6 +79,10 @@ export interface RepoAnalysis {
   synthesizedDockerfile: string | null;
   dockerfileSource: "repo" | "synthesized";
   requiredEnvVars: EnvVarRequirement[];
+  /** Build/install steps so a terminal opens with the tool ready to run. */
+  setupCommands: string[];
+  /** First command worth trying once setup has run. */
+  tryCommand: string | null;
 }
 
 // Analysis is deterministic-ish and expensive (clone + LLM call), and the agent
@@ -140,7 +161,11 @@ export async function analyzeRepoContext({
           "it listens on, and CMD/ENTRYPOINT to start the server in the foreground. Use a full base " +
           "image (not scratch/distroless) so a shell is available. If it's not web-servable, set " +
           "dockerfile to null.\n") +
-      ENV_VAR_RULES[promptVersion],
+      ENV_VAR_RULES[promptVersion] +
+      "\n\nFinally, if this is NOT web-servable it will be opened in a terminal, so say how to make " +
+      "it actually usable there. Give setupCommands that build or install it from /repo (following " +
+      "the project's own README), and a tryCommand that demonstrates it. The tryCommand must work " +
+      "after setupCommands run -- do not suggest running a binary that no build step produces.",
   });
 
   return {
@@ -149,6 +174,8 @@ export async function analyzeRepoContext({
     synthesizedDockerfile: hasDockerfile ? null : object.dockerfile,
     dockerfileSource: hasDockerfile ? "repo" : "synthesized",
     requiredEnvVars: object.requiredEnvVars,
+    setupCommands: object.setupCommands,
+    tryCommand: object.tryCommand,
   };
 }
 
@@ -166,43 +193,15 @@ export async function analyzeRepo(repoUrlInput: string): Promise<RepoAnalysis> {
 
   const workDir = await cloneRepo(repoUrl);
   try {
-    const hasDockerfile = await fileExists(join(workDir, "Dockerfile"));
-    const context = await readRepoContext(workDir);
-
-    const { object } = await generateObject({
-      model: fireworks.chat(FIREWORKS_MODEL),
-      schema: AnalysisSchema,
-      prompt:
-        `Repo: ${repoUrl}\n\n${context}\n\n` +
-        `This repo ${hasDockerfile ? "already has" : "does NOT have"} a root Dockerfile.\n\n` +
-        "Determine if it's a web-servable application (something that runs an HTTP server a browser " +
-        "could hit) as opposed to a CLI tool, library, or documentation/skills collection.\n" +
-        (hasDockerfile
-          ? "It already has a Dockerfile, so set dockerfile to null -- do not write one.\n"
-          : "If it is web-servable, write a complete Dockerfile: install dependencies, EXPOSE the port " +
-            "it listens on, and CMD/ENTRYPOINT to start the server in the foreground. Use a full base " +
-            "image (not scratch/distroless) so a shell is available. If it's not web-servable, set " +
-            "dockerfile to null.\n") +
-        "Then list the environment variables a user must supply for it to actually work. Rules:\n" +
-        "- Base every entry on real evidence (.env.example, README setup instructions, docker-compose " +
-        "environment keys). Do not guess or invent.\n" +
-        "- Use the literal variable name the app reads (e.g. ANTHROPIC_API_KEY), never a category or " +
-        "placeholder like 'llm_provider_api_keys'. If several providers are possible, list the specific " +
-        "variables and mark them optional rather than inventing one umbrella name.\n" +
-        "- Omit variables that already have working defaults -- this list should be as short as possible, " +
-        "and empty is a good answer for most repos.\n" +
-        "- Mark buildTime true only for variables consumed while the image builds.",
+    // Delegates to the same function the eval measures, so what ships and what
+    // gets scored can't drift apart.
+    const result = await analyzeRepoContext({
+      repoUrl,
+      context: await readRepoContext(workDir),
+      hasDockerfile: await fileExists(join(workDir, "Dockerfile")),
     });
 
-    const analysis: RepoAnalysis = {
-      repoUrl,
-      webServable: object.webServable,
-      reasoning: object.reasoning,
-      synthesizedDockerfile: hasDockerfile ? null : object.dockerfile,
-      dockerfileSource: hasDockerfile ? "repo" : "synthesized",
-      requiredEnvVars: object.requiredEnvVars,
-    };
-
+    const analysis: RepoAnalysis = { repoUrl, ...result };
     analysisCache.set(repoUrl, analysis);
     return analysis;
   } finally {

@@ -40,7 +40,15 @@ export function TerminalTool({
         sessionId: json.sessionId,
         baseImage: json.baseImage,
         workspaceId: json.workspaceId,
-        note: "The terminal is open in the panel beside the chat. Suggest a first command to try.",
+        // The project was already built into the image, so the suggested
+        // command must be the installed one -- not a source path the user
+        // would have to compile first.
+        setupRan: json.setupRan,
+        tryCommand: json.tryCommand,
+        note:
+          "The terminal is open in the panel beside the chat. The project has already been built " +
+          "and installed in the image. Suggest tryCommand verbatim as the first thing to run; do " +
+          "not invent a different command and do not tell the user to build or install anything.",
       };
     },
     render: ({ args, result, status }) => {
