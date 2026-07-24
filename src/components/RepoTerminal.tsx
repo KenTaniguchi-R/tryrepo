@@ -79,7 +79,7 @@ export function RepoTerminal({
   }, [sessionId]);
 
   return (
-    <div className="border border-neutral-200 rounded-2xl overflow-hidden">
+    <div className="border border-neutral-200 rounded-2xl overflow-hidden flex flex-col h-full">
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-neutral-200 text-xs">
         <span className="font-mono truncate">{repoUrl.replace("https://github.com/", "")}</span>
         <span className="flex items-center gap-2 shrink-0 text-neutral-500">
@@ -97,7 +97,7 @@ export function RepoTerminal({
           </span>
         </span>
       </div>
-      <div ref={containerRef} className="h-[340px] bg-[#0a0a0a] p-2" />
+      <div ref={containerRef} className="flex-1 min-h-[240px] bg-[#0a0a0a] p-2" />
       <div className="px-3 py-2 border-t border-neutral-200 text-xs text-neutral-500">
         Live shell in the repo at <span className="font-mono">/repo</span>. Sandbox auto-deletes in
         30 minutes.
