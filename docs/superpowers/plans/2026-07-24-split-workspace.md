@@ -457,11 +457,14 @@ describe("repo file primitives", () => {
     const res = await readRepoFile(repo, "src/app.ts");
     expect(res.lines).toContain("handleLogin");
     expect(res.truncated).toBe(false);
+    // The `<n>\t` prefix is a tested contract, not incidental: the agent needs
+    // line numbers to cite where code lives, not just quote it.
+    expect(res.lines.startsWith("1\t")).toBe(true);
   });
 
   it("reads a slice with offset and limit", async () => {
     const res = await readRepoFile(repo, "src/app.ts", { offset: 2, limit: 1 });
-    expect(res.lines.trim()).toBe("export function handleLogin() {}");
+    expect(res.lines.trim()).toBe("2\texport function handleLogin() {}");
   });
 
   it("refuses a binary file", async () => {
