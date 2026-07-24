@@ -7,7 +7,7 @@ async function main() {
     process.exit(1);
   }
 
-  const result = await deployRepo(repoPath, (msg) => console.log(`[progress] ${msg}`));
+  const result = await deployRepo(repoPath, {}, (msg) => console.log(`[progress] ${msg}`));
   console.log("\nRESULT:", result);
 
   console.log("\ncurling preview url...");

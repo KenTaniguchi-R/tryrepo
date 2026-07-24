@@ -1682,26 +1682,35 @@ git commit -m "Show deploys and terminals in a split workspace pane"
 
 ---
 
-## Deferred security finding (accepted, not fixed here)
+## Security finding (RESOLVED)
 
-An automated review flagged `src/lib/terminal.ts`: session ids are
+An automated review flagged `src/lib/terminal.ts`: session ids were
 `term-<counter>-<8 hex of sandbox id>`, and `/api/terminal/[id]/input` and
-`/api/terminal/[id]/stream` call `getSession(id)` with no authorization check.
-Guessing an id therefore grants interactive shell access to another user's
+`/api/terminal/[id]/stream` called `getSession(id)` with no authorization check.
+Guessing an id therefore granted interactive shell access to another user's
 sandbox. Rated HIGH.
 
-Decision: **acknowledged and deferred.** The app currently runs on localhost via
-`pnpm dev`, where practical exposure is low. This is recorded so it is not
-silently lost, and so the final whole-branch review can triage it.
+Originally deferred as low-risk-on-localhost. **That rationale did not hold:**
+`next dev` binds to `0.0.0.0`, so the app was reachable at
+`http://<lan-ip>:3000` on the venue's shared wifi during the hackathon — exactly
+the condition the deferral note said would make it dangerous. Fixed rather than
+carried.
 
-It stops being low-risk the moment the app is demoed on a shared network or
-hosted anywhere. The fix is CSPRNG session ids plus binding the session to its
-requester — an httpOnly cookie set by the `start` route and verified in both
-`/input` and `/stream`.
+The fix, as anticipated:
 
-This plan does not touch it, but it does avoid repeating the pattern:
-`workspace.ts` (Task 1) generates ids with `randomBytes` rather than a counter,
-because a workspace id is likewise the only thing guarding a clone's contents.
+- Session ids are now `randomBytes(24).toString("hex")` — unguessable.
+- `startTerminalSession` takes an `ownerId`; the `start` route mints one into an
+  httpOnly, `sameSite: "strict"` cookie (`tryrepo_term_owner`) and both
+  `/input` and `/stream` verify it.
+- The check lives inside `getSession()` rather than at each call site, so a new
+  route cannot expose a shell by forgetting it. A mismatch returns 404, not 403,
+  so it does not confirm that a session id exists.
+
+Verified end to end: with no cookie, `/input` and `/stream` both return 404;
+with the owner cookie, `/input` returns 200.
+
+`workspace.ts` (Task 1) already generates ids with `randomBytes` for the same
+reason — a workspace id likewise guards a clone's contents.
 
 ## Known deviation from the spec
 

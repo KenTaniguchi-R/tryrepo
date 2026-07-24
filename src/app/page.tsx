@@ -5,9 +5,21 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CopilotChat, CopilotKit } from "@copilotkit/react-core/v2";
 import { ArrowRight, ArrowSquareOut } from "@phosphor-icons/react/dist/ssr";
+import { EnvVarPrompt } from "@/components/EnvVarPrompt";
+import { TerminalTool } from "@/components/TerminalTool";
 import trending from "@/data/trending-repos.json";
 
-const QUICK_START_REPOS = ["schollz/croc", "diegosouzapw/OmniRoute", "mattpocock/skills"];
+// Each of these is verified end-to-end and covers a different path:
+//   hallmark          -> no Dockerfile, one gets written for it (~60s)
+//   code-review-graph -> not a web app, opens an interactive terminal (~35s)
+//   worldmonitor      -> ships its own Dockerfile, real multi-stage build (~3min)
+// Deliberately NOT croc (builds fine but speaks raw TCP, so no HTTP preview)
+// or OmniRoute (heavy npm-workspace build, too slow and unverified).
+const QUICK_START_REPOS = [
+  "Nutlope/hallmark",
+  "tirth8205/code-review-graph",
+  "koala73/worldmonitor",
+];
 const quickStartRepos = QUICK_START_REPOS.map(
   (name) => trending.repos.find((r) => r.name === name)!
 );
@@ -44,6 +56,8 @@ function Chat() {
 
   return (
     <div className="flex flex-col gap-3 h-full">
+      <EnvVarPrompt />
+      <TerminalTool />
       {repo && <RepoBanner repo={repo} />}
       <div className="flex-1 min-h-0 border border-neutral-200 rounded-2xl overflow-hidden flex flex-col">
         <div className="flex-1 min-h-0">
@@ -107,11 +121,12 @@ export default function Home() {
 
         <div className="text-center max-w-md mx-auto">
           <h1 className="text-3xl font-semibold tracking-tight leading-tight">
-            Paste a repo. Get a live preview.
+            Paste a repo. Try it in seconds.
           </h1>
           <p className="text-sm text-neutral-500 mt-2">
-            Point tryrepo at any GitHub repo with a root Dockerfile. It builds a
-            sandbox and hands you a disposable preview URL, no local setup.
+            Point tryrepo at any GitHub repo. Web apps get a disposable preview URL —
+            it uses the repo&apos;s Dockerfile or writes one. CLI tools get a live
+            terminal instead. Nothing runs on your machine.
           </p>
         </div>
 

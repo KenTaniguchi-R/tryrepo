@@ -1,4 +1,3 @@
-import { createOpenAI } from "@ai-sdk/openai";
 import {
   BuiltInAgent,
   CopilotRuntime,
@@ -7,27 +6,69 @@ import {
 } from "@copilotkit/runtime/v2";
 import { z } from "zod";
 import { deployRepo } from "@/lib/deploy";
+import { analyzeRepo } from "@/lib/analyzeRepo";
 import { logDeployAttempt } from "@/lib/braintrust";
+import { fireworks, FIREWORKS_MODEL } from "@/lib/fireworks";
 
-const fireworks = createOpenAI({
-  apiKey: process.env.FIREWORKS_API_KEY,
-  baseURL: "https://api.fireworks.ai/inference/v1",
-});
-
-const deployTool = defineTool({
-  name: "deployRepo",
+const analyzeTool = defineTool({
+  name: "analyzeRepo",
   description:
-    "Deploy a public GitHub repository that has a root-level Dockerfile into a live, temporary, publicly reachable sandbox. Returns a preview URL. Only supports repos with a Dockerfile at the repo root.",
+    "Inspect a GitHub repository BEFORE deploying it. Reports whether it's a web-servable project, " +
+    "whether a Dockerfile had to be generated for it, and — importantly — which environment variables " +
+    "the user must supply for it to build and run. Always call this first.",
   parameters: z.object({
     repoUrl: z
       .string()
       .describe("GitHub repository URL, e.g. https://github.com/owner/repo or owner/repo"),
   }),
   execute: async ({ repoUrl }) => {
+    console.log(`[analyzeTool] analyzing: ${repoUrl}`);
+    try {
+      const analysis = await analyzeRepo(repoUrl);
+      console.log(`[analyzeTool] result:`, {
+        webServable: analysis.webServable,
+        dockerfileSource: analysis.dockerfileSource,
+        envVars: analysis.requiredEnvVars.map((v) => v.name),
+      });
+      return {
+        status: "ok" as const,
+        webServable: analysis.webServable,
+        reasoning: analysis.reasoning,
+        dockerfileSource: analysis.dockerfileSource,
+        requiredEnvVars: analysis.requiredEnvVars,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.log(`[analyzeTool] failed: ${message}`);
+      return { status: "error" as const, error: message };
+    }
+  },
+});
+
+const deployTool = defineTool({
+  name: "deployRepo",
+  description:
+    "Deploy a public GitHub repository into a live, temporary, publicly reachable sandbox and return a preview URL. " +
+    "Call analyzeRepo first; if it reported required environment variables, collect them from the user " +
+    "(via the collectEnvVars tool) and pass them here as envVars.",
+  parameters: z.object({
+    repoUrl: z
+      .string()
+      .describe("GitHub repository URL, e.g. https://github.com/owner/repo or owner/repo"),
+    envVars: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe(
+        "Environment variable name/value pairs supplied by the user. Omit or pass {} if none are needed."
+      ),
+  }),
+  execute: async ({ repoUrl, envVars }) => {
     const startedAt = Date.now();
     console.log(`[deployTool] starting: ${repoUrl}`);
     try {
-      const result = await deployRepo(repoUrl, (msg) => console.log(`[deployTool] ${msg}`));
+      const result = await deployRepo(repoUrl, envVars ?? {}, (msg) =>
+        console.log(`[deployTool] ${msg}`)
+      );
       await logDeployAttempt({
         repoUrl,
         success: true,
@@ -42,6 +83,7 @@ const deployTool = defineTool({
         sandboxId: result.sandboxId,
         port: result.port,
         runCommand: result.runCommand,
+        dockerfileSource: result.dockerfileSource,
         note: "This preview URL auto-expires in 30 minutes.",
       };
     } catch (err) {
@@ -61,17 +103,27 @@ const deployTool = defineTool({
 const runtime = new CopilotRuntime({
   agents: {
     default: new BuiltInAgent({
-      model: fireworks.chat(process.env.FIREWORKS_MODEL ?? "accounts/fireworks/models/minimax-m3"),
-      tools: [deployTool],
-      // Default maxSteps is 1 -- the model would call the tool but never get a
-      // follow-up turn to report the result back in the chat. We need at least
-      // one more step after the tool call to summarize the outcome for the user.
-      maxSteps: 4,
+      model: fireworks.chat(FIREWORKS_MODEL),
+      tools: [analyzeTool, deployTool],
+      // Default maxSteps is 1 -- the model would call a tool but never get a
+      // follow-up turn. The full flow can be analyze -> collectEnvVars ->
+      // deploy -> summarize, so it needs headroom for several rounds.
+      maxSteps: 8,
       prompt:
-        "You help users try out open source GitHub projects instantly, without them needing to clone or configure anything locally. " +
-        "When a user gives you a GitHub repo URL (or owner/repo shorthand), call the deployRepo tool. " +
-        "If it fails because there's no Dockerfile, tell the user clearly that this MVP only supports repos with a root Dockerfile. " +
-        "When it succeeds, give the user the preview URL and mention it expires in 30 minutes.",
+        "You help users try out open source GitHub projects instantly, without them needing to clone or configure anything locally.\n\n" +
+        "When a user gives you a GitHub repo URL (or owner/repo shorthand), follow this sequence:\n" +
+        "1. Call analyzeRepo first, always.\n" +
+        "2. If it reports webServable: false, do NOT call deployRepo. Briefly explain why there's no " +
+        "web preview (it's a CLI tool, library, or docs collection), then call openTerminal so the " +
+        "user gets an interactive shell with the repo checked out at /repo instead. Once it's ready, " +
+        "suggest a concrete first command based on the repo's README (e.g. how to install and run it).\n" +
+        "3. If it reports any requiredEnvVars, call collectEnvVars with that exact list to ask the user " +
+        "for the values. Do NOT invent, guess, or fabricate values yourself, and do not skip this step.\n" +
+        "4. Call deployRepo, passing envVars with whatever the user supplied (or {} if none were needed).\n" +
+        "5. Give the user the preview URL and mention it expires in 30 minutes. If dockerfileSource is " +
+        "'synthesized', flag that the Dockerfile was auto-generated and is best-effort.\n\n" +
+        "If the user declines to provide env vars, you may still attempt the deploy, but warn them it " +
+        "will probably fail without them.",
     }),
   },
 });
