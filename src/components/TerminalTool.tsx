@@ -1,18 +1,21 @@
 "use client";
 
+import { useEffect } from "react";
 import { useFrontendTool } from "@copilotkit/react-core/v2";
 import { z } from "zod";
-import { RepoTerminal } from "./RepoTerminal";
 
 /**
  * The escape hatch for repos that have no web UI to preview -- CLI tools,
- * TUIs, libraries. Instead of telling the user "not supported", the agent can
- * drop them into a real shell inside a sandbox with the repo already there.
+ * TUIs, libraries. The agent drops the user into a real shell in a sandbox.
  *
- * Runs as a frontend tool so the handler can start the session and the render
- * can mount the terminal in the same place.
+ * On success the session is handed to the workspace pane rather than rendered
+ * in the message list, where a PTY would only get a fraction of the height.
  */
-export function TerminalTool() {
+export function TerminalTool({
+  onReady,
+}: {
+  onReady: (session: { sessionId: string; repoUrl: string; baseImage: string }) => void;
+}) {
   useFrontendTool({
     name: "openTerminal",
     description:
@@ -36,7 +39,8 @@ export function TerminalTool() {
         status: "ready",
         sessionId: json.sessionId,
         baseImage: json.baseImage,
-        note: "Terminal is rendered in the chat. Tell the user it's ready and suggest a first command.",
+        workspaceId: json.workspaceId,
+        note: "The terminal is open in the panel beside the chat. Suggest a first command to try.",
       };
     },
     render: ({ args, result, status }) => {
@@ -49,18 +53,14 @@ export function TerminalTool() {
         );
       }
 
-      // CopilotKit may hand the tool result back as a JSON string rather than
-      // the object the handler returned, so accept either shape.
-      let data: { status?: string; sessionId?: string; baseImage?: string; error?: string } = {};
-      if (typeof result === "string") {
-        try {
-          data = JSON.parse(result);
-        } catch {
-          data = { error: result };
-        }
-      } else if (result && typeof result === "object") {
-        data = result as typeof data;
-      }
+      // useFrontendTool hands back the object the handler returned -- already
+      // parsed, unlike useRenderTool for backend tools. Do not JSON.parse here.
+      const data = result as {
+        status?: string;
+        sessionId?: string;
+        baseImage?: string;
+        error?: string;
+      };
 
       if (data.status !== "ready" || !data.sessionId) {
         return (
@@ -71,14 +71,41 @@ export function TerminalTool() {
       }
 
       return (
-        <RepoTerminal
+        <TerminalReady
           sessionId={data.sessionId}
           repoUrl={args?.repoUrl ?? ""}
           baseImage={data.baseImage ?? ""}
+          onReady={onReady}
         />
       );
     },
   });
 
   return null;
+}
+
+/**
+ * A renderer cannot call setState during render, so the hand-off to the pane
+ * happens in an effect keyed on the session.
+ */
+function TerminalReady({
+  sessionId,
+  repoUrl,
+  baseImage,
+  onReady,
+}: {
+  sessionId: string;
+  repoUrl: string;
+  baseImage: string;
+  onReady: (session: { sessionId: string; repoUrl: string; baseImage: string }) => void;
+}) {
+  useEffect(() => {
+    onReady({ sessionId, repoUrl, baseImage });
+  }, [sessionId, repoUrl, baseImage, onReady]);
+
+  return (
+    <div className="border border-neutral-200 rounded-2xl px-4 py-3 text-sm text-neutral-500">
+      Terminal is open in the panel beside the chat.
+    </div>
+  );
 }

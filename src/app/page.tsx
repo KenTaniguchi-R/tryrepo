@@ -1,12 +1,14 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CopilotChat, CopilotKit } from "@copilotkit/react-core/v2";
 import { ArrowRight, ArrowSquareOut } from "@phosphor-icons/react/dist/ssr";
+import { DeployTool } from "@/components/DeployTool";
 import { EnvVarPrompt } from "@/components/EnvVarPrompt";
 import { TerminalTool } from "@/components/TerminalTool";
+import { WorkspacePane, type PaneState } from "@/components/WorkspacePane";
 import trending from "@/data/trending-repos.json";
 
 // Each of these is verified end-to-end and covers a different path:
@@ -50,15 +52,35 @@ function RepoBanner({ repo }: { repo: string }) {
   );
 }
 
-function Chat() {
+function Chat({
+  pane,
+  setPane,
+}: {
+  pane: PaneState;
+  setPane: (state: PaneState) => void;
+}) {
   const searchParams = useSearchParams();
   const repo = searchParams.get("repo") ?? "";
+  const split = pane.kind !== "none";
+
+  const onDeployed = useCallback(
+    ({ workspaceId, previewUrl }: { workspaceId: string; previewUrl: string }) =>
+      setPane({ kind: "preview", workspaceId, previewUrl, startedAt: Date.now() }),
+    [setPane]
+  );
+
+  const onTerminalReady = useCallback(
+    (session: { sessionId: string; repoUrl: string; baseImage: string }) =>
+      setPane({ kind: "terminal", ...session }),
+    [setPane]
+  );
 
   return (
     <div className="flex flex-col gap-3 h-full">
       <EnvVarPrompt />
-      <TerminalTool />
-      {repo && <RepoBanner repo={repo} />}
+      <DeployTool onDeployed={onDeployed} />
+      <TerminalTool onReady={onTerminalReady} />
+      {repo && !split && <RepoBanner repo={repo} />}
       <div className="flex-1 min-h-0 border border-neutral-200 rounded-2xl overflow-hidden flex flex-col">
         <div className="flex-1 min-h-0">
           {/* CopilotChat renders its own welcome heading + disclaimer by
@@ -74,35 +96,47 @@ function Chat() {
             }}
           />
         </div>
-        <div className="px-4 pb-4 flex flex-col gap-2 shrink-0">
-          <span className="text-xs text-neutral-400">
-            Or try one of this week&apos;s trending repos
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {quickStartRepos.map((r) => (
-              <Link
-                key={r.name}
-                href={`/?repo=${encodeURIComponent(r.url)}`}
-                className="inline-flex items-center gap-1.5 text-xs font-mono bg-neutral-100 border border-neutral-200 rounded-full px-3 py-1.5 hover:bg-neutral-200 transition-colors"
-              >
-                <ArrowSquareOut size={12} className="text-neutral-400" />
-                {r.name}
-              </Link>
-            ))}
+        {!split && (
+          <div className="px-4 pb-4 flex flex-col gap-2 shrink-0">
+            <span className="text-xs text-neutral-400">
+              Or try one of this week&apos;s trending repos
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {quickStartRepos.map((r) => (
+                <Link
+                  key={r.name}
+                  href={`/?repo=${encodeURIComponent(r.url)}`}
+                  className="inline-flex items-center gap-1.5 text-xs font-mono bg-neutral-100 border border-neutral-200 rounded-full px-3 py-1.5 hover:bg-neutral-200 transition-colors"
+                >
+                  <ArrowSquareOut size={12} className="text-neutral-400" />
+                  {r.name}
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
-      <p className="text-center text-xs text-neutral-400">
-        Auto-expires in 30 minutes. Nothing persists.
-      </p>
+      {!split && (
+        <p className="text-center text-xs text-neutral-400">
+          Auto-expires in 30 minutes. Nothing persists.
+        </p>
+      )}
     </div>
   );
 }
 
 export default function Home() {
+  const [pane, setPane] = useState<PaneState>({ kind: "none" });
+  const split = pane.kind !== "none";
+
   return (
     <CopilotKit runtimeUrl="/api/copilotkit" useSingleEndpoint={true}>
-      <main className="flex flex-col flex-1 max-w-2xl mx-auto w-full p-6 gap-6">
+      <main
+        className={
+          "flex flex-col flex-1 mx-auto w-full p-6 gap-6 " +
+          (split ? "max-w-6xl" : "max-w-2xl")
+        }
+      >
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-mono font-bold text-xs">
@@ -119,21 +153,33 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="text-center max-w-md mx-auto">
-          <h1 className="text-3xl font-semibold tracking-tight leading-tight">
-            Paste a repo. Try it in seconds.
-          </h1>
-          <p className="text-sm text-neutral-500 mt-2">
-            Point tryrepo at any GitHub repo. Web apps get a disposable preview URL —
-            it uses the repo&apos;s Dockerfile or writes one. CLI tools get a live
-            terminal instead. Nothing runs on your machine.
-          </p>
-        </div>
+        {!split && (
+          <div className="text-center max-w-md mx-auto">
+            <h1 className="text-3xl font-semibold tracking-tight leading-tight">
+              Paste a repo. Get a live preview.
+            </h1>
+            <p className="text-sm text-neutral-500 mt-2">
+              Point tryrepo at any GitHub repo. It uses the repo&apos;s Dockerfile, or writes one,
+              then hands you a disposable preview URL. No local setup.
+            </p>
+          </div>
+        )}
 
-        <div className="flex-1 min-h-[55vh]">
+        <div
+          className={
+            split
+              ? "flex-1 min-h-[70vh] grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4"
+              : "flex-1 min-h-[55vh]"
+          }
+        >
           <Suspense fallback={null}>
-            <Chat />
+            <Chat pane={pane} setPane={setPane} />
           </Suspense>
+          {split && (
+            <div className="min-h-[420px] lg:min-h-0">
+              <WorkspacePane state={pane} />
+            </div>
+          )}
         </div>
       </main>
     </CopilotKit>
