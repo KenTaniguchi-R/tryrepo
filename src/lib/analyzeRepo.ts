@@ -83,6 +83,76 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 /**
+ * Prompt versions are kept side by side so the eval can measure one against
+ * the other. v1 asked for "real evidence" but never said what a variable name
+ * may look like, and the model duly invented `llm_provider_api_keys` -- a
+ * category, not a variable any app reads. v2 spells that rule out.
+ */
+export type PromptVersion = "v1" | "v2";
+
+const ENV_VAR_RULES: Record<PromptVersion, string> = {
+  v1:
+    "Then list the environment variables a user must supply for it to actually work. Base this on " +
+    "real evidence (.env.example, README setup instructions, docker-compose environment keys) -- " +
+    "not guesses. Mark buildTime true only for variables consumed while the image builds.",
+  v2:
+    "Then list the environment variables a user must supply for it to actually work. Rules:\n" +
+    "- Base every entry on real evidence (.env.example, README setup instructions, docker-compose " +
+    "environment keys). Do not guess or invent.\n" +
+    "- Use the literal variable name the app reads (e.g. ANTHROPIC_API_KEY), never a category or " +
+    "placeholder like 'llm_provider_api_keys'. If several providers are possible, list the specific " +
+    "variables and mark them optional rather than inventing one umbrella name.\n" +
+    "- Omit variables that already have working defaults -- this list should be as short as possible, " +
+    "and empty is a good answer for most repos.\n" +
+    "- Mark buildTime true only for variables consumed while the image builds.",
+};
+
+export interface AnalyzeContextInput {
+  repoUrl: string;
+  /** README + manifest text, as produced by readRepoContext(). */
+  context: string;
+  hasDockerfile: boolean;
+  promptVersion?: PromptVersion;
+}
+
+/**
+ * The pure LLM step, with no cloning or filesystem access. Separated out so the
+ * eval can replay saved repo fixtures offline -- fast, repeatable, and free of
+ * network flakiness that would otherwise be scored as model error.
+ */
+export async function analyzeRepoContext({
+  repoUrl,
+  context,
+  hasDockerfile,
+  promptVersion = "v2",
+}: AnalyzeContextInput): Promise<Omit<RepoAnalysis, "repoUrl">> {
+  const { object } = await generateObject({
+    model: fireworks.chat(FIREWORKS_MODEL),
+    schema: AnalysisSchema,
+    prompt:
+      `Repo: ${repoUrl}\n\n${context}\n\n` +
+      `This repo ${hasDockerfile ? "already has" : "does NOT have"} a root Dockerfile.\n\n` +
+      "Determine if it's a web-servable application (something that runs an HTTP server a browser " +
+      "could hit) as opposed to a CLI tool, library, or documentation/skills collection.\n" +
+      (hasDockerfile
+        ? "It already has a Dockerfile, so set dockerfile to null -- do not write one.\n"
+        : "If it is web-servable, write a complete Dockerfile: install dependencies, EXPOSE the port " +
+          "it listens on, and CMD/ENTRYPOINT to start the server in the foreground. Use a full base " +
+          "image (not scratch/distroless) so a shell is available. If it's not web-servable, set " +
+          "dockerfile to null.\n") +
+      ENV_VAR_RULES[promptVersion],
+  });
+
+  return {
+    webServable: object.webServable,
+    reasoning: object.reasoning,
+    synthesizedDockerfile: hasDockerfile ? null : object.dockerfile,
+    dockerfileSource: hasDockerfile ? "repo" : "synthesized",
+    requiredEnvVars: object.requiredEnvVars,
+  };
+}
+
+/**
  * Clones a repo and works out (a) whether it's something we can serve at all,
  * (b) a Dockerfile for it if it doesn't ship one, and (c) which environment
  * variables the user will need to provide. Split out from the deploy step so
