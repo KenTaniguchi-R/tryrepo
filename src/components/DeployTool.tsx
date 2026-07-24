@@ -11,12 +11,23 @@ type DeployPayload = {
   error?: string;
 };
 
-function parse(result: string): DeployPayload {
-  try {
-    return JSON.parse(result) as DeployPayload;
-  } catch {
-    return {};
+/**
+ * CopilotKit is inconsistent about whether a tool result arrives as a JSON
+ * string or as the object itself, so accept either. Assuming one shape makes
+ * every successful run render as a failure.
+ */
+function parse(result: unknown): DeployPayload {
+  if (typeof result === "string") {
+    try {
+      return JSON.parse(result) as DeployPayload;
+    } catch {
+      return {};
+    }
   }
+  if (result && typeof result === "object") {
+    return result as DeployPayload;
+  }
+  return {};
 }
 
 export function DeployTool({

@@ -53,14 +53,26 @@ export function TerminalTool({
         );
       }
 
-      // useFrontendTool hands back the object the handler returned -- already
-      // parsed, unlike useRenderTool for backend tools. Do not JSON.parse here.
-      const data = result as {
+      // Observed in practice: CopilotKit sometimes hands the result back as a
+      // JSON string rather than the object the handler returned. Assuming the
+      // object shape made every successful session render as "unknown error",
+      // so accept either.
+      type TerminalResult = {
         status?: string;
         sessionId?: string;
         baseImage?: string;
         error?: string;
       };
+      let data: TerminalResult = {};
+      if (typeof result === "string") {
+        try {
+          data = JSON.parse(result) as TerminalResult;
+        } catch {
+          data = { error: result };
+        }
+      } else if (result && typeof result === "object") {
+        data = result as TerminalResult;
+      }
 
       if (data.status !== "ready" || !data.sessionId) {
         return (
