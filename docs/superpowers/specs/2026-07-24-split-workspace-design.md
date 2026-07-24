@@ -15,9 +15,19 @@ it anything about the code.
 
 ## What we are building
 
-After a deploy succeeds, the page becomes a workspace: the running app is embedded
-on the right, and the same conversation continues on the left, now able to read the
-repo it deployed.
+Once the agent produces something runnable, the page becomes a workspace: the result
+is shown on the right, and the same conversation continues on the left, now able to
+read the repo it just worked on.
+
+"Something runnable" has two forms, because the codebase already handles both:
+
+- A **web repo** gets deployed and the preview URL is embedded in an iframe.
+- A **non-web repo** (CLI, TUI, library) gets an interactive terminal in a sandbox,
+  via the existing `openTerminal` frontend tool.
+
+Both occupy the same right-hand pane. Today the terminal renders inline inside the
+chat message list, which gives a 28-row PTY roughly a third of the screen; moving it
+into the pane is part of this work.
 
 Scope is read-only question answering about the code. The agent does not edit files
 and does not redeploy.
@@ -87,10 +97,19 @@ New `src/lib/workspace.ts`. An in-memory
 interval sweeper that removes entries older than 35 minutes and deletes their
 `workDir`. The TTL sits just past the sandbox's own 30-minute auto-delete.
 
-`deployRepo` changes in two ways. It drops the `rm` in its `finally`, and it
-registers the clone in the workspace, returning `workspaceId` alongside its existing
-fields. Registration happens whenever the clone succeeded, including when the build
-later fails, so repo questions still work on a failed deploy.
+It follows the module-level store idiom already established in `terminal.ts`: a
+`Map` plus a monotonic counter, with `getWorkspace()` / `closeWorkspace()` accessors.
+Cleanup follows the philosophy documented in `reapSandboxes.ts` — opportunistic, and
+never allowed to fail a user-facing operation.
+
+Two call sites currently delete their clone in a `finally` and both need to hand it
+to the workspace instead:
+
+- `deploy.ts:259-261` in `deployRepo`
+- `terminal.ts:114-116` in `startTerminalSession`
+
+Registration happens whenever the clone succeeded, including when the build later
+fails, so repo questions still work on a failed deploy.
 
 Nothing is persisted. A server restart loses all workspaces, and the sweeper is the
 only reclamation path.
@@ -131,19 +150,34 @@ that file exists in this repo.
 
 ### Frontend
 
-`page.tsx` holds `workspace: { workspaceId, previewUrl, deployedAt } | null`. When
-null it renders today's centered landing unchanged. When set it renders the split
-view.
+`page.tsx` holds one piece of state describing what the pane should show:
 
-It is populated through CopilotKit's `useRenderTool` on `deployRepo`. The renderer
-draws the in-chat result card and lifts the result into page state, which avoids
-polling the message stream.
+```ts
+type PaneState =
+  | { kind: "none" }
+  | { kind: "preview"; workspaceId: string; previewUrl: string; startedAt: number }
+  | { kind: "terminal"; sessionId: string; repoUrl: string; baseImage: string };
+```
 
-Two verified details that shape the implementation. `useRenderTool`'s complete state
-exposes `result` as a **string**, not a parsed object, so the renderer must
-`JSON.parse` it defensively and tolerate a tool error payload. And because the
-renderer is a React component, it cannot call `setState` during render: lifting the
-result into page state has to happen in a `useEffect` keyed on `toolCallId`.
+`kind: "none"` renders today's centered landing, unchanged. Anything else renders the
+split view.
+
+The two producers differ, and the difference matters:
+
+- **`deployRepo` is a backend tool.** It is observed with `useRenderTool`, whose
+  complete state exposes `result` as a **string**, so the renderer must `JSON.parse`
+  defensively and tolerate an error payload.
+- **`openTerminal` is a frontend tool** (`useFrontendTool` in `TerminalTool.tsx`).
+  Its `render` receives `result` **already parsed** as an object — see
+  `TerminalTool.tsx:52`, which casts directly with no parse. Do not add one.
+
+Because a renderer is a React component, neither may call `setState` during render.
+Lifting into page state happens in a `useEffect` keyed on the tool call id.
+
+`TerminalTool` keeps its handler and its executing/error states inline in the chat,
+but on success it reports upward instead of mounting `RepoTerminal` in the message
+list. `RepoTerminal` itself moves into the pane essentially unchanged; its fixed
+`h-[340px]` becomes a flex fill so it can use the pane's full height.
 
 Two new pieces:
 
@@ -165,10 +199,15 @@ embedding.
 | State | Behavior |
 | --- | --- |
 | Building | Pane mirrors the progress messages `deployRepo` already emits |
-| Live | iframe, reload, open-in-new-tab, countdown to expiry |
+| Live (preview) | iframe, reload, open-in-new-tab, countdown to expiry |
+| Live (terminal) | `RepoTerminal` fills the pane; its existing connecting / live / closed dot is kept |
 | Expired | Notice replaces the iframe; chat keeps working, since the clone outlives the sandbox |
 | Won't frame | `frame-check` returns not embeddable, so show an open-in-new-tab card rather than a blank box |
 | Deploy failed | Stay on the landing; chat still answers repo questions from the clone |
+
+A repo yields either a preview or a terminal, never both at once. The most recent
+tool result wins, so a repo that fails to deploy and then falls back to a terminal
+ends up showing the terminal.
 
 ## Testing
 
