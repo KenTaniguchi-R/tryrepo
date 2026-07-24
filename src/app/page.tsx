@@ -134,7 +134,12 @@ export default function Home() {
       <main
         className={
           "flex flex-col flex-1 mx-auto w-full p-6 gap-6 " +
-          (split ? "max-w-6xl" : "max-w-2xl")
+          // Once split, clamp to the viewport so each pane scrolls internally
+          // instead of the whole page growing. Only from lg up: below that the
+          // panes stack and the page should scroll normally.
+          (split
+            ? "max-w-6xl lg:h-[100dvh] lg:max-h-[100dvh] lg:overflow-hidden"
+            : "max-w-2xl")
         }
       >
         <div className="flex items-center justify-between gap-4">
@@ -168,13 +173,17 @@ export default function Home() {
         <div
           className={
             split
-              ? "flex-1 min-h-[70vh] grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4"
+              ? "flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4"
               : "flex-1 min-h-[55vh]"
           }
         >
-          <Suspense fallback={null}>
-            <Chat pane={pane} setPane={setPane} />
-          </Suspense>
+          {/* `contents` keeps this wrapper layout-neutral when not split, so the
+              single-column landing behaves exactly as before. */}
+          <div className={split ? "min-h-[60vh] lg:min-h-0" : "contents"}>
+            <Suspense fallback={null}>
+              <Chat pane={pane} setPane={setPane} />
+            </Suspense>
+          </div>
           {split && (
             <div className="min-h-[420px] lg:min-h-0">
               <WorkspacePane state={pane} />
