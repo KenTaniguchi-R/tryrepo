@@ -101,12 +101,44 @@ over complete-and-polished.
    installed — v2's UI components (`CopilotChat`, `CopilotSidebar`, etc.)
    live in `@copilotkit/react-core/v2`.
 
+4a. **CopilotKit's SSE stream emits nothing while a tool runs, and a proxy
+   will kill it.** `createSseEventResponse` writes agent events and nothing
+   else — no heartbeat, no comment frames. A slow tool (`deployRepo` on a
+   real multi-stage build like `koala73/worldmonitor` takes ~3-4min) leaves
+   the response idle for minutes. Measured against the Cloudflare tunnel the
+   demo is served through, the HTTP/2 stream is **reset after ~125s of
+   silence** (curl exit 92; the identical request to `localhost:3000`
+   survives 150s+ fine, so this is purely the proxy). In the browser it
+   surfaces as `TypeError: network error` -> CopilotKit
+   `agent_run_failed_event`, which reads like an app bug and isn't one.
+   `src/lib/sseKeepAlive.ts` wraps the handler's response and pads idle gaps
+   with `: keepalive` SSE comment frames every 15s. Comments are safe: ag-ui's
+   `parseSSEStream` only collects lines starting with `data:` and skips a
+   frame that yields none. Don't remove this — without it any repo whose
+   build exceeds ~2min fails in the deployed app while working locally.
+   Verified end-to-end: worldmonitor deploy, 246s, clean `RUN_FINISHED`.
+
 5. **pnpm build-script approval**: this repo's `pnpm-workspace.yaml` lists
    `onlyBuiltDependencies` (currently `sharp`, `unrs-resolver`). If `pnpm
    install` errors with `ERR_PNPM_IGNORED_BUILDS`, either add the new package
    to that list or run `pnpm approve-builds --all`. The `pnpm.*` key in
    `package.json` is a dead end — pnpm 11 moved this to
    `pnpm-workspace.yaml` and silently ignores the `package.json` field.
+
+6. **`deployRepo` returns before the app is actually serving, and the
+   frame-check has to account for that.** `getPreviewLink()` is called ~1s
+   after the run command launches (see the deploy log: `starting app with:
+   ...` then `Live at ...` one second later), so the URL is live before the
+   app binds its port. During that window the Daytona proxy answers **502
+   with no framing headers** — confirmed by requesting a port nothing listens
+   on. Header-only logic reads that as "nothing forbids framing" and returns
+   embeddable, which is how `koala73/worldmonitor` (it sends
+   `X-Frame-Options: SAMEORIGIN` + a `frame-ancestors` list that excludes us)
+   ended up in an iframe the browser then blocked, showing a broken-document
+   icon while the URL opened fine in a new tab. `evaluateFrameCheck()` maps
+   5xx to `{ unreachable: true }` and `WorkspacePane` re-probes every 3s for
+   up to 90s before committing. Don't collapse that back into a single
+   probe — the first one is almost always too early.
 
 ## The terminal builds the project into the image
 

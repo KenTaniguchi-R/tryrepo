@@ -10,6 +10,7 @@ import { analyzeRepo } from "@/lib/analyzeRepo";
 import { logDeployAttempt } from "@/lib/braintrust";
 import { fireworks, FIREWORKS_MODEL } from "@/lib/fireworks";
 import { repoTools } from "@/lib/repoTools";
+import { withSseKeepAlive } from "@/lib/sseKeepAlive";
 
 const analyzeTool = defineTool({
   name: "analyzeRepo",
@@ -145,4 +146,8 @@ const handler = createCopilotRuntimeHandler({
   mode: "single-route",
 });
 
-export const POST = handler;
+// deployRepo can run for minutes with nothing to stream. Without keepalive
+// frames the proxy in front of this app drops the idle SSE response and the
+// browser reports `TypeError: network error`. See src/lib/sseKeepAlive.ts.
+export const POST = async (request: Request) =>
+  withSseKeepAlive(await handler(request));

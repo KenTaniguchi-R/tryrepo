@@ -5,6 +5,9 @@ import { ArrowClockwise, ArrowSquareOut } from "@phosphor-icons/react";
 import { RepoTerminal } from "./RepoTerminal";
 
 const PREVIEW_LIFETIME_MS = 30 * 60 * 1000;
+/** How long to keep re-probing a preview that is still booting. */
+const BOOT_GRACE_MS = 90 * 1000;
+const FRAME_CHECK_RETRY_MS = 3000;
 
 export type PaneState =
   | { kind: "none" }
@@ -36,18 +39,39 @@ function PreviewFrame({ previewUrl, startedAt }: { previewUrl: string; startedAt
   const remaining = useCountdown(startedAt);
   const expired = remaining <= 0;
 
+  // The preview URL is handed out ~1s after the app's run command starts, so
+  // the first probe almost always catches the app mid-boot and comes back
+  // `unreachable`. Committing to an iframe on that answer is what leaves a
+  // broken frame for apps that refuse embedding once they're actually up, so
+  // keep asking until the answer is a real verdict.
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/frame-check?url=${encodeURIComponent(previewUrl)}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (!cancelled) setEmbeddable(json.embeddable !== false);
-      })
-      .catch(() => {
-        if (!cancelled) setEmbeddable(true);
-      });
+    let timer: ReturnType<typeof setTimeout>;
+    const giveUpAt = Date.now() + BOOT_GRACE_MS;
+
+    const check = async () => {
+      let result: { embeddable?: boolean; unreachable?: boolean } | null = null;
+      try {
+        const res = await fetch(`/api/frame-check?url=${encodeURIComponent(previewUrl)}`);
+        result = await res.json();
+      } catch {
+        result = null;
+      }
+      if (cancelled) return;
+
+      const undecided = result === null || result.unreachable === true;
+      if (undecided && Date.now() < giveUpAt) {
+        timer = setTimeout(check, FRAME_CHECK_RETRY_MS);
+        return;
+      }
+      // Out of grace, or a real verdict. Still fail open on "undecided".
+      setEmbeddable(result?.embeddable !== false);
+    };
+
+    void check();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [previewUrl]);
 
@@ -113,7 +137,7 @@ function PreviewFrame({ previewUrl, startedAt }: { previewUrl: string; startedAt
           </div>
         ) : embeddable === null ? (
           <div className="h-full flex items-center justify-center text-xs text-neutral-400">
-            Checking preview…
+            Waiting for the app to start…
           </div>
         ) : (
           <iframe

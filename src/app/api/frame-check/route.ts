@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isEmbeddable } from "@/lib/frameCheck";
+import { evaluateFrameCheck } from "@/lib/frameCheck";
 
 export async function GET(request: Request) {
   const target = new URL(request.url).searchParams.get("url");
@@ -23,10 +23,12 @@ export async function GET(request: Request) {
       redirect: "follow",
       signal: AbortSignal.timeout(8000),
     });
-    return NextResponse.json({ embeddable: isEmbeddable(res.headers) });
+    return NextResponse.json(evaluateFrameCheck(res.status, res.headers));
   } catch {
-    // The app may still be booting. Assume embeddable and let the iframe try;
-    // a blank frame is recoverable, a false "cannot embed" is not.
+    // The app may still be booting. Report that rather than a verdict -- the
+    // caller retries while `unreachable` and only then falls back to trying
+    // the iframe, since a blank frame is recoverable and a false "cannot
+    // embed" is not.
     return NextResponse.json({ embeddable: true, unreachable: true });
   }
 }
