@@ -3,7 +3,8 @@
 Paste a GitHub repo URL, get a live, disposable preview running in an isolated
 sandbox — no local setup, no figuring out configuration, nothing to clean up.
 
-Built for the Daytona HackSprint w/ Braintrust (SF, July 24 2026).
+Built for the Daytona HackSprint w/ Braintrust (SF, July 24 2026), where it won
+**Best Use of CopilotKit**.
 
 ## The problem
 
